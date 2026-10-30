@@ -278,65 +278,58 @@ def prepare_data_loader(
     move_to_device: bool = True,
     auto_transfer: bool = True,
 ) -> torch.utils.data.DataLoader:
-    """Prepares :class:`~torch.utils.data.DataLoader` for distributed execution.
+    """Prepare :class:`~torch.utils.data.DataLoader` for distributed execution.
 
-    This allows you to use the same exact code regardless of number of
-    workers or the device type being used (CPU, GPU).
+    Run the same data loading code across any number of workers on CPU, GPU, or
+    TPU.
 
     .. note::
 
-        This method adds a `DistributedSampler` to the `DataLoader` if the
-        number of training workers is greater than 1. If shuffling is
-        enabled on the original `DataLoader`, then `shuffle=True` will also
-        be passed into the `DistributedSampler` constructor. `shuffle=False`
-        on the original `DataLoader` also means that shuffling is disabled
-        on the sampler.
+        This method adds a ``DistributedSampler`` to the ``DataLoader`` when you
+        run more than one training worker, preserving the ``shuffle`` setting
+        from the original ``DataLoader``.
 
-        With more than 1 worker, calling the `DistributedSampler.set_epoch` method
-        at the beginning of each epoch before creating the DataLoader iterator
-        is necessary to make shuffling work properly across multiple epochs.
-        Otherwise, the same ordering will be always used.
-        See: https://docs.pytorch.org/docs/stable/data.html#torch.utils.data.distributed.DistributedSampler  # noqa: E501
+        With more than one worker and shuffling enabled, call
+        ``DistributedSampler.set_epoch`` at the start of each epoch before
+        iterating over the ``DataLoader`` so the shuffle order changes across
+        epochs. For details, see
+        :class:`~torch.utils.data.distributed.DistributedSampler`.
 
     Example:
 
-    .. testcode:
-        :skipif: True
+    .. code-block:: python
 
         import torch
 
         import ray.train.torch
 
-        train_dataloader = torch.utils.data.DataLoader(
+        train_loader = torch.utils.data.DataLoader(
             ..., batch_size=..., shuffle=True
         )
-        train_dataloader = ray.train.torch.prepare_data_loader(train_loader)
+        train_loader = ray.train.torch.prepare_data_loader(train_loader)
 
         for epoch in range(10):
             if ray.train.get_context().get_world_size() > 1:
-                # Required for the distributed sampler to shuffle properly across epochs
-                train_dataloader.sampler.set_epoch(epoch)
+                train_loader.sampler.set_epoch(epoch)
 
             for X, y in train_loader:
-                # No need to move data to GPU, this is done by `prepare_data_loader`!
-                # X, y = X.to("cuda"), y.to("cuda")
+                # `prepare_data_loader` moves batches to the worker's device.
                 ...
 
     Args:
-        data_loader: The DataLoader to prepare.
-        add_dist_sampler: Whether to add a DistributedSampler to
-            the provided DataLoader.
-        move_to_device: If set, automatically move the data
-            returned by the data loader to the correct device.
-        auto_transfer: If set and device is GPU, another CUDA stream
-            is created to automatically copy data from host (CPU) memory
-            to device (GPU) memory (the default CUDA stream still runs the
-            training procedure). If device is CPU, it will be disabled
-            regardless of the setting. This configuration will be ignored
-            if ``move_to_device`` is False.
+        data_loader: The ``DataLoader`` to prepare.
+        add_dist_sampler: Whether to add a ``DistributedSampler`` to
+            the provided ``DataLoader``.
+        move_to_device: If set, automatically move batches yielded by the
+            ``DataLoader`` to the worker's device.
+        auto_transfer: If set and the device supports streams, such as a CUDA
+            GPU, TPU, or NPU, Ray Train creates a separate device stream to copy
+            batches from host memory to device memory while the current stream
+            runs training. Disabled on CPU or when ``move_to_device`` is
+            ``False``.
 
     Returns:
-        The prepared DataLoader.
+        The prepared ``DataLoader``.
     """
     record_extra_usage_tag(TagKey.TRAIN_TORCH_PREPARE_DATALOADER, "1")
 

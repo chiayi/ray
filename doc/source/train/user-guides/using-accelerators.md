@@ -146,31 +146,39 @@ trainer = JaxTrainer(
 trainer.fit()
 ```
 
-When you use {class}`~ray.train.torch.TorchTrainer` with `resources_per_worker={"TPU": 1}`, Ray Train initializes the `tpu_dist` backend for [TorchTPU](https://torchtpu.readthedocs.io/en/latest/), sets the `torch.distributed` and multi-slice `MEGASCALE_*` environment variables, and binds each worker to `torch.device("tpu")` through {func}`ray.train.torch.get_device`.
+When you use {class}`~ray.train.torch.TorchTrainer` with `resources_per_worker={"TPU": 1}`, Ray Train initializes the `tpu_dist` backend for [TorchTPU](https://torchtpu.readthedocs.io/en/latest/), sets the `torch.distributed` and multi-slice `MEGASCALE_*` environment variables, and binds each worker to `torch.device("tpu")` through {func}`ray.train.torch.get_device`. Inside the training function, call {func}`ray.train.torch.prepare_model` to wrap the model in `DistributedDataParallel` on the worker's TPU device, and call {func}`ray.train.torch.prepare_data_loader` to shard the dataset and prefetch batches onto TPU memory on a separate `torch.tpu.Stream`.
 
-The following example runs one training step with TorchTPU on 16 per-device workers:
+The following example trains a model for one epoch with TorchTPU across 16 per-device workers:
 
 ```python
 import torch
+from torch.utils.data import DataLoader, TensorDataset
 
 import ray.train
 from ray.train import ScalingConfig
-from ray.train.torch import TorchTrainer, get_device, prepare_model
+from ray.train.torch import TorchTrainer, prepare_data_loader, prepare_model
 
 
 def train_func():
-    device = get_device()
-    model = torch.nn.Linear(128, 10).to(device)
+    model = torch.nn.Linear(128, 10)
     model = prepare_model(model)
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
 
-    inputs = torch.randn(32, 128, device=device)
-    targets = torch.randint(0, 10, (32,), device=device)
+    dataset = TensorDataset(
+        torch.randn(1024, 128),
+        torch.randint(0, 10, (1024,)),
+    )
+    dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
+    dataloader = prepare_data_loader(dataloader)
 
-    optimizer.zero_grad()
-    loss = torch.nn.functional.cross_entropy(model(inputs), targets)
-    loss.backward()
-    optimizer.step()
+    if ray.train.get_context().get_world_size() > 1:
+        dataloader.sampler.set_epoch(0)
+
+    for inputs, targets in dataloader:
+        optimizer.zero_grad()
+        loss = torch.nn.functional.cross_entropy(model(inputs), targets)
+        loss.backward()
+        optimizer.step()
 
     ray.train.report({"loss": loss.item()})
 
