@@ -171,23 +171,47 @@ def prepare_model(
 ) -> torch.nn.Module:
     """Prepares the model for distributed execution.
 
-    This allows you to use the same exact code regardless of number of
-    workers or the device type being used (CPU, GPU).
+    Run the same training code across any number of workers on CPU, GPU, or TPU.
+
+    Example:
+
+    .. code-block:: python
+
+        import torch
+        import ray.train.torch
+
+        # Default DistributedDataParallel wrapping.
+        model = ray.train.torch.prepare_model(torch.nn.Linear(128, 10))
+
+        # Shard across GPU or TPU workers with TorchTitan SimpleFSDP.
+        sharded_model = ray.train.torch.prepare_model(
+            torch.nn.Linear(128, 10),
+            parallel_strategy="simple_fsdp",
+        )
 
     Args:
-        model: A torch model to prepare.
-        move_to_device: Either a boolean indiciating whether to move
+        model: A PyTorch model to prepare.
+        move_to_device: Either a boolean indicating whether to move
             the model to the correct device or an actual device to
-            move the model to. If set to False, the model needs
-            to manually be moved to the correct device.
+            move the model to. If set to ``False``, you must move the model
+            to the correct device manually.
         parallel_strategy: Whether to wrap models in
             ``DistributedDataParallel``, ``FullyShardedDataParallel``,
-            ``simple_fsdp.data_parallel``, or neither. Must be one of ``"ddp"``,
-            ``"fsdp"``, ``"simple_fsdp"``, or ``None``.
-        parallel_strategy_kwargs: Args to pass into
+            ``simple_fsdp.data_parallel``, or none of them. Must be one of
+            ``"ddp"``, ``"fsdp"``, ``"simple_fsdp"``, or ``None``.
+            ``"fsdp"`` runs only on CUDA GPUs. ``"simple_fsdp"`` wraps the
+            model with
+            ``torchtitan.experiments.graph_trainer.simple_fsdp.data_parallel``,
+            supports both GPUs and TPUs, and requires the ``torchtitan``
+            package from `TorchTitan <https://github.com/pytorch/torchtitan>`_.
+        parallel_strategy_kwargs: Keyword arguments passed to
             ``DistributedDataParallel``, ``FullyShardedDataParallel``, or
-            ``simple_fsdp.data_parallel`` initialization if ``parallel_strategy``
-            is set to ``"ddp"``, ``"fsdp"``, or ``"simple_fsdp"``, respectively.
+            ``simple_fsdp.data_parallel`` when ``parallel_strategy`` is set to
+            ``"ddp"``, ``"fsdp"``, or ``"simple_fsdp"``, respectively. When
+            ``parallel_strategy="simple_fsdp"`` and training runs on more than
+            one worker, ``mode`` defaults to ``"fully_shard"``, and Ray Train
+            creates a 1D ``DeviceMesh`` across all workers if ``device_mesh``
+            isn't specified.
 
     Returns:
         The prepared model, wrapped according to ``parallel_strategy``.

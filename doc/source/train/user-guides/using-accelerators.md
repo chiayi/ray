@@ -187,6 +187,76 @@ trainer = TorchTrainer(
 )
 trainer.fit()
 ```
+
+The `parallel_strategy="fsdp"` option wraps models with PyTorch's `FullyShardedDataParallel`, which runs only on CUDA GPUs. To shard model parameters, gradients, and optimizer states across TPU devices, install [TorchTitan](https://github.com/google-pytorch/torchtitan) and pass `parallel_strategy="simple_fsdp"` to {func}`ray.train.torch.prepare_model`. When you run more than one worker, Ray Train creates a 1D `DeviceMesh` across the workers and wraps the model with `torchtitan.experiments.graph_trainer.simple_fsdp.data_parallel` in `"fully_shard"` mode. Create your optimizer after you call `prepare_model` so that it tracks the sharded parameters. `SimpleFSDP` shards parameters through `DTensor` placements rather than module hooks, so `torch.compile` with `backend="tpu"` traces the forward and backward pass as one graph. To pass a custom `DeviceMesh`, `MixedPrecisionPolicy`, `mode`, or `shard_dim`, set `parallel_strategy_kwargs`.
+
+The following example shards a model with `SimpleFSDP` and compiles the training step across 16 TPU devices:
+
+```python
+import torch
+from torch.utils.data import DataLoader, TensorDataset
+from torchtitan.experiments.graph_trainer import simple_fsdp
+
+import ray.train
+from ray.train import ScalingConfig
+from ray.train.torch import TorchTrainer, prepare_data_loader, prepare_model
+
+
+def train_func():
+    model = torch.nn.Sequential(
+        torch.nn.Linear(128, 256),
+        torch.nn.SiLU(),
+        torch.nn.Linear(256, 10),
+    )
+    mp_policy = simple_fsdp.MixedPrecisionPolicy(
+        param_dtype=torch.float32,
+        reduce_dtype=torch.bfloat16,
+    )
+    model = prepare_model(
+        model,
+        parallel_strategy="simple_fsdp",
+        parallel_strategy_kwargs={"mp_policy": mp_policy},
+    )
+    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
+
+    dataset = TensorDataset(
+        torch.randn(1024, 128),
+        torch.randint(0, 10, (1024,)),
+    )
+    dataloader = DataLoader(dataset, batch_size=32, shuffle=True, drop_last=True)
+    dataloader = prepare_data_loader(dataloader)
+
+    if ray.train.get_context().get_world_size() > 1:
+        dataloader.sampler.set_epoch(0)
+
+    def train_step(mod, inputs, targets):
+        outputs = mod(inputs)
+        loss = torch.nn.functional.cross_entropy(outputs, targets)
+        loss.backward()
+        return loss.detach()
+
+    compiled_step = torch.compile(train_step, backend="tpu")
+
+    for inputs, targets in dataloader:
+        optimizer.zero_grad()
+        loss = compiled_step(model, inputs, targets)
+        optimizer.step()
+
+    ray.train.report({"loss": loss.item()})
+
+
+trainer = TorchTrainer(
+    train_func,
+    scaling_config=ScalingConfig(
+        num_workers=16,
+        use_tpu=True,
+        topology="4x4",
+        accelerator_type="TPU-V6E",
+        resources_per_worker={"TPU": 1},
+    ),
+)
+trainer.fit()
+```
 :::
 ::::
 

@@ -146,12 +146,13 @@ class TorchTrainer(DataParallelTrainer):
             datasets via `train_loop_config` is not recommended and may introduce
             large overhead and unknown issues with serialization and deserialization.
         torch_config: The configuration for setting up the PyTorch Distributed backend.
-            If set to None, a default configuration will be used in which
-            GPU training uses NCCL and CPU training uses Gloo.
+            If set to ``None``, Ray Train uses a default configuration in which
+            GPU training uses ``"nccl"``, TPU training uses ``"tpu_dist"``, and
+            CPU training uses ``"gloo"``.
         scaling_config: The configuration for how to scale data parallel training.
-            ``num_workers`` determines how many Python processes are used for training,
-            and ``use_gpu`` determines whether or not each process should use GPUs.
-            See :class:`~ray.train.ScalingConfig` for more info.
+            ``num_workers`` determines how many Python processes run training,
+            and ``use_gpu`` or ``use_tpu`` selects accelerator resources for
+            each worker. See :class:`~ray.train.ScalingConfig` for details.
         run_config: The configuration for the execution of the training run.
             See :class:`~ray.train.RunConfig` for more info.
         datasets: The Ray Datasets to ingest for training.

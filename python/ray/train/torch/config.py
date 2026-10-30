@@ -51,10 +51,9 @@ class TorchConfig(BackendConfig):
 
     Args:
         backend: The backend to use for training.
-            See ``torch.distributed.init_process_group`` for more info and
-            valid values.
-            If set to None, nccl will be used if GPUs are requested, else gloo
-            will be used.
+            See ``torch.distributed.init_process_group`` for valid values.
+            If set to ``None``, Ray Train uses ``"nccl"`` for GPUs,
+            ``"tpu_dist"`` for TPUs, and ``"gloo"`` otherwise.
         init_method: The initialization method to use. Either "env"
             for environment variable initialization or "tcp" for TCP
             initialization. Defaults to "env".

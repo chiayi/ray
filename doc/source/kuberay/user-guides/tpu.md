@@ -120,6 +120,8 @@ trainer = TorchTrainer(
 trainer.fit()
 ```
 
+To shard model parameters, gradients, and optimizer states across TPU devices with TorchTitan's `SimpleFSDP`, pass `parallel_strategy="simple_fsdp"` to {func}`ray.train.torch.prepare_model`. For a full example, see the **TPU** tab in {ref}`Use accelerators in the training function <using-accelerators-in-the-training-function>`.
+
 :::
 
 :::{tab-item} Ray Train with JaxTrainer
