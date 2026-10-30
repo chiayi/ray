@@ -169,7 +169,7 @@ def prepare_model(
     parallel_strategy: Optional[str] = "ddp",
     parallel_strategy_kwargs: Optional[Dict[str, Any]] = None,
 ) -> torch.nn.Module:
-    """Prepares the model for distributed execution.
+    """Prepare the model for distributed execution.
 
     Run the same training code across any number of workers on CPU, GPU, or TPU.
 
@@ -183,7 +183,7 @@ def prepare_model(
         # Default DistributedDataParallel wrapping.
         model = ray.train.torch.prepare_model(torch.nn.Linear(128, 10))
 
-        # Shard across GPU or TPU workers with TorchTitan SimpleFSDP.
+        # Shard across GPU or TPU workers with TorchTitan simple_fsdp.
         sharded_model = ray.train.torch.prepare_model(
             torch.nn.Linear(128, 10),
             parallel_strategy="simple_fsdp",
@@ -203,15 +203,18 @@ def prepare_model(
             model with
             ``torchtitan.experiments.graph_trainer.simple_fsdp.data_parallel``,
             supports both GPUs and TPUs, and requires the ``torchtitan``
-            package from `TorchTitan <https://github.com/pytorch/torchtitan>`_.
+            package from `pytorch/torchtitan
+            <https://github.com/pytorch/torchtitan>`_ for GPUs or
+            `google-pytorch/torchtitan
+            <https://github.com/google-pytorch/torchtitan>`_ for TPUs.
         parallel_strategy_kwargs: Keyword arguments passed to
             ``DistributedDataParallel``, ``FullyShardedDataParallel``, or
-            ``simple_fsdp.data_parallel`` when ``parallel_strategy`` is set to
+            ``simple_fsdp.data_parallel`` when ``parallel_strategy`` is
             ``"ddp"``, ``"fsdp"``, or ``"simple_fsdp"``, respectively. When
             ``parallel_strategy="simple_fsdp"`` and training runs on more than
             one worker, ``mode`` defaults to ``"fully_shard"``, and Ray Train
-            creates a 1D ``DeviceMesh`` across all workers if ``device_mesh``
-            isn't specified.
+            creates a 1D ``DeviceMesh`` across all workers if you don't specify
+            ``device_mesh``.
 
     Returns:
         The prepared model, wrapped according to ``parallel_strategy``.
