@@ -188,9 +188,7 @@ trainer = TorchTrainer(
 trainer.fit()
 ```
 
-The `parallel_strategy="fsdp"` option wraps models with PyTorch's `FullyShardedDataParallel`, which runs only on CUDA GPUs. To shard model parameters, gradients, and optimizer states across TPU devices, install [TorchTitan](https://github.com/google-pytorch/torchtitan) and pass `parallel_strategy="simple_fsdp"` to {func}`ray.train.torch.prepare_model`. When you run more than one worker, Ray Train creates a 1D `DeviceMesh` across the workers and wraps the model with `torchtitan.experiments.graph_trainer.simple_fsdp.data_parallel` in `"fully_shard"` mode.
-
-Create your optimizer after you call `prepare_model` so it tracks the sharded parameters. Unlike `DistributedDataParallel`, `simple_fsdp` sums gradients across workers rather than averaging them, so divide the loss by the world size before calling `backward()`. `simple_fsdp` shards parameters through `DTensor` placements rather than module hooks, so `torch.compile` with `backend="tpu"` traces the forward and backward pass as one graph. To pass a custom `DeviceMesh`, `MixedPrecisionPolicy`, `mode`, or `shard_dim`, set `parallel_strategy_kwargs`.
+The `parallel_strategy="fsdp"` option supports only CUDA GPUs. To shard a model across TPU workers, install [TorchTitan](https://github.com/google-pytorch/torchtitan) and pass `parallel_strategy="simple_fsdp"` to {func}`ray.train.torch.prepare_model`. Ray Train shards the model over a 1D `DeviceMesh` with TorchTitan's `simple_fsdp`, using `DTensor` placements that compile as a single graph with `torch.compile(..., backend="tpu")`. Create the optimizer after calling `prepare_model`, and divide the loss by the world size before `backward()` because `simple_fsdp` sums gradients across workers.
 
 The following example shards a model with `simple_fsdp` and compiles the training step across 16 TPU devices:
 
